@@ -1,0 +1,7 @@
+<a class="item active" data-tab="details">{{ 'sylius.ui.details'|trans }}</a>
+{# ON DÉSACTIVE LES AVIS ET LES ATTRIBUTES SUR LE BAS DE PAGE
+{% if product.attributes|length > 0 %}
+    <a class="item" data-tab="attributes" {{ sylius_test_html_attribute('tab', 'attributes') }}>{{ 'sylius.ui.attributes'|trans }}</a>
+{% endif %}
+<a class="item" data-tab="reviews">{{ 'sylius.ui.reviews'|trans }} ({{ product.acceptedReviews|length }})</a>
+#}

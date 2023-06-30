@@ -1,0 +1,35 @@
+{% extends '@SyliusAdmin/Email/layout.html.twig' %}
+
+{% block subject %}
+    {% include '@SyliusCore/Email/Blocks/OrderConfirmation/_subject.html.twig' %}
+{% endblock %}
+
+{% block content %}
+    {% include '@SyliusCore/Email/Blocks/OrderConfirmation/_content.html.twig' %}
+
+    <h2>Éléments de commande:</h2>
+
+    {% set totalOrder = 0 %} {# Initializing the variable here #}
+
+    {% for item in order.items %}
+        {% set productSlug = item.product.translations['fr_FR'].slug %}
+        <a style="text-decoration: none;color: #333;" href="{{ url('sylius_shop_product_show', {'slug': productSlug }) }}">
+            <div style="display: flex;">
+                <div style="flex-basis: 50%;">
+                    Produit: {{ item.productName }}<br>
+                    Quantité: {{ item.quantity }}<br>
+                    Début de réservation: <strong>{{ item.startReservationDate|date('d-m-Y') }}</strong><br>
+                    Fin de réservation: <strong>{{ item.endReservationDate|date('d-m-Y') }}</strong><br>
+                    Total: {{ item.total/100 }} {{ order.currencyCode }}
+                </div>
+                <div class="div__wrapper__img" style="flex-basis: 50%;text-align: center;">
+                    <style>.div__wrapper__img img { width: 50%; }</style>
+                    {% include '@SyliusAdmin/Product/_mainImage.html.twig' with {'product': item.product, 'filter': 'sylius_admin_product_thumbnail'} %}
+                </div>
+            </div>
+        </a>
+        <hr>
+        {% set totalOrder = totalOrder + item.total/100 %} {# Adding each item total to the totalOrder variable #}
+    {% endfor %}
+    <h2>Prix total: {{ totalOrder }} {{ order.currencyCode }}</h2>
+{% endblock %}

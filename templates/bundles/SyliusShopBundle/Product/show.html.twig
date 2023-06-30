@@ -1,0 +1,199 @@
+{% extends '@SyliusShop/layout.html.twig' %}
+
+{% block title %}{{ product.name }} | {{ parent() }}{% endblock %}
+
+{% block content %}
+    {% include '@SyliusShop/Product/Show/_breadcrumb.html.twig' %}
+    <div class="ui hidden divider"></div>
+
+    <div class="ui two column stackable grid">
+        <div class="column">
+            {{ sylius_template_event('sylius.shop.product.show.left_sidebar', _context) }}
+            <div id='error-calendar'></div>
+            <div id='calendar'></div>
+        </div>
+        <div class="column" {{ sylius_test_html_attribute('product-box') }}>
+            {{ sylius_template_event('sylius.shop.product.show.right_sidebar', _context) }}
+        </div>
+    </div>
+    {{ dump(inventoryCalendar) }}
+
+    {% for item in itemsForProduct %}
+        {{ dump(item) }}
+        ID du produit :{{ item.variant.id }}<br>
+        {{ item.quantity }} produits réservés<br>
+        {% if item.daysReservation is not null %}
+            {% for date in item.daysReservation %}
+                {{ date }}<br>
+            {% endfor %}
+        {% endif %}
+        <br>
+    {% endfor %}
+    {{ sylius_template_event('sylius.shop.product.show.content', _context) }}
+{% endblock %}
+
+{% block javascripts %}
+    {{ parent() }}
+
+    <!-- FullCalendar CSS -->
+    <!--<link href="https://unpkg.com/@fullcalendar/core@5/main.min.css" rel="stylesheet" />-->
+    <!--<link href="https://unpkg.com/@fullcalendar/daygrid@5/main.min.css" rel="stylesheet" />-->
+
+    <!-- FullCalendar JS -->
+    <!--<script src="https://unpkg.com/@fullcalendar/core@5/main.min.js"></script>-->
+    <!--<script src="https://unpkg.com/@fullcalendar/daygrid@5/main.min.js"></script>-->
+
+    <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js'></script>
+    <script>
+
+
+        document.addEventListener('DOMContentLoaded', function() {
+            var inventoryCalendar = {{ inventoryCalendar|raw }};
+            var quantityEl = document.getElementById('quantity');
+            var initialStock = {{ productStock }};
+            var calendarEl = document.getElementById('calendar');
+            var calendar;
+
+            var startReservationDateEl = document.getElementById('startReservationDate');
+            var endReservationDateEl = document.getElementById('endReservationDate');
+            // Ajoutez les gestionnaires d'événements aux champs de date
+            startReservationDateEl.addEventListener('change', checkDates);
+            endReservationDateEl.addEventListener('change', checkDates);
+
+            function checkDates() {
+                var start = new Date(startReservationDateEl.value);
+                var end = new Date(endReservationDateEl.value);
+                var quantity = Number(quantityEl.value);
+                var valid = true;
+
+                // Vérifiez si la date de début est après la date de fin
+                if (start > end) {
+                    valid = false;
+                    alert("La date de début ne peut pas être après la date de fin.");
+                } else {
+                    // Si la date de début et de fin sont les mêmes, vérifiez simplement la disponibilité pour ce jour
+                    if (startReservationDateEl.value === endReservationDateEl.value) {
+                        var dateString = start.toISOString().split('T')[0];
+                        var stock = inventoryCalendar[dateString];
+                        if (stock === undefined || stock < quantity) {
+                            valid = false;
+                        }
+                    } else {
+                        //end.setDate(end.getDate() - 1); // soustraire un jour pour correspondre à la sélection de l'utilisateur
+
+                        // Sinon, vérifiez la disponibilité pour chaque jour de la période de réservation
+                        for (var d = start; d <= end; d.setDate(d.getDate() + 1)) {
+                            var dateString = d.toISOString().split('T')[0];
+                            var stock = inventoryCalendar[dateString];
+                            if (stock === undefined || stock < quantity) {
+                                valid = false;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (!valid) {
+                    alert("Il n'y a pas assez de stock disponible pour la plage de dates sélectionnée.");
+                    document.getElementById('error-calendar').innerHTML = '<p style="color: red;">Pas de disponibilité pour ces dates</p>';
+                    // Efface les dates du formulaire
+                    startReservationDateEl.value = '';
+                    endReservationDateEl.value = '';
+                } else {
+                    document.getElementById('error-calendar').innerHTML = '<p></p>';
+                }
+
+                return valid; // Retourner si les dates sont valides ou non
+            }
+
+            function buildCalendar() {
+                var quantity = Number(quantityEl.value);
+                var halfQuantity = initialStock / 2;
+
+                // Destroy previous calendar if it exists
+                if (calendar) {
+                    calendar.destroy();
+                }
+
+                calendar = new FullCalendar.Calendar(calendarEl, {
+                    initialView: 'dayGridMonth',
+                    contentHeight: 'auto',
+                    selectable: true,
+                    events: Object.keys(inventoryCalendar).map(function(date) {
+                        var stock = inventoryCalendar[date];
+                        var color;
+                        if (stock > halfQuantity) {
+                            color = 'green';
+                        } else if (stock <= halfQuantity && stock > 0) {
+                            color = 'orange';
+                        } else if (stock === 0) {
+                            color = 'red';
+                        }
+                        return {
+                            title: 'Stock: ' + stock,
+                            start: date,
+                            color: (stock < quantity && stock !== 0) ? 'grey' : color,
+                            selectable: stock >= quantity
+                        };
+                    }),
+                    eventContent: function(arg) { // ajoutez ce hook pour personnaliser le rendu du contenu de l'événement
+                        var title = document.createElement('div');
+                        title.innerHTML = 'Stock: <br>' + arg.event.title.split(':')[1].trim();
+                        title.style.textAlign = 'center';
+                        return { html: title.outerHTML };
+                    },
+                    select: function(info) {
+                        var start = new Date(info.startStr);
+                        var end = new Date(info.endStr);
+                        end.setDate(end.getDate() - 1); // soustraire un jour pour correspondre à la sélection de l'utilisateur
+
+                        var valid = true;
+
+                        for (var d = start; d <= end; d.setDate(d.getDate() + 1)) {
+                            var dateString = d.toISOString().split('T')[0];
+                            var stock = inventoryCalendar[dateString];
+                            if (stock === undefined || stock < quantity) {
+                                valid = false;
+                                break;
+                            }
+                        }
+
+                        if (!valid) {
+                            alert("Il n'y a pas assez de stock disponible pour la plage de dates sélectionnée.");
+                            document.getElementById('error-calendar').innerHTML = '<p style="color: red;">Pas de disponibilité pour ces dates</p>';
+                        } else {
+                            document.getElementById('error-calendar').innerHTML = '<p></p>';
+                            document.getElementById('startReservationDate').value = info.startStr;
+                            document.getElementById('endReservationDate').value = end.toISOString().split('T')[0];
+                        }
+                    }
+                });
+
+                calendar.render();
+            }
+
+            // Build calendar initially
+            buildCalendar();
+
+            // Re-build calendar when quantity changes
+            quantityEl.addEventListener('input', function() {
+                buildCalendar();
+                checkDates(); // Verifier les dates après que la quantité a été modifiée
+            });
+        });
+        document.getElementById('addToCartButton').addEventListener('click', function(e) {
+            var valid = checkDates();
+
+            if (!valid) {
+                e.preventDefault(); // Stop le comportement normal du bouton si les dates ne sont pas valides
+                // Ajoutez ici tout autre code que vous voulez exécuter si les dates ne sont pas valides
+            }
+        });
+    </script>
+
+    <script type="text/javascript">
+        lightbox.option({
+            'albumLabel': '{{ 'sylius.lightbox.image_album_label'|trans|escape('js') }}'
+        });
+    </script>
+{% endblock %}
